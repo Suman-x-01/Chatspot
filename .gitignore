@@ -1,0 +1,64 @@
+# ===========================
+# Git Ignore for Entire Project
+# ===========================
+
+# Ignore logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Ignore OS & IDE-related files
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.vscode/
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# ===========================
+# Backend-Specific Ignore Rules (CHAT_APP_BACKEND)
+# ===========================
+/CHAT_APP_BACKEND/HELP.md
+/CHAT_APP_BACKEND/target/
+!/CHAT_APP_BACKEND/.mvn/wrapper/maven-wrapper.jar
+!/CHAT_APP_BACKEND/**/src/main/**/target/
+!/CHAT_APP_BACKEND/**/src/test/**/target/
+
+/CHAT_APP_BACKEND/.apt_generated
+/CHAT_APP_BACKEND/.classpath
+/CHAT_APP_BACKEND/.factorypath
+/CHAT_APP_BACKEND/.project
+/CHAT_APP_BACKEND/.settings
+/CHAT_APP_BACKEND/.springBeans
+/CHAT_APP_BACKEND/.sts4-cache
+
+# Ignore NetBeans files
+/CHAT_APP_BACKEND/nbproject/private/
+/CHAT_APP_BACKEND/nbbuild/
+/CHAT_APP_BACKEND/dist/
+/CHAT_APP_BACKEND/nbdist/
+/CHAT_APP_BACKEND/.nb-gradle/
+/CHAT_APP_BACKEND/build/
+!/CHAT_APP_BACKEND/**/src/main/**/build/
+!/CHAT_APP_BACKEND/**/src/test/**/build/
+
+# ===========================
+# Frontend-Specific Ignore Rules (front-chat)
+# ===========================
+/front-chat/node_modules
+/front-chat/dist/
+front-chat/dist-ssr
+/front-chat/*.local
+
+# Ignore archive file
+/front-chat/src-23.zip
+/CHAT_APP_BACKEND/src-2.zip
