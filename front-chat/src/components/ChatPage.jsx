@@ -1,4 +1,3 @@
-// !==================
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { MdAttachFile, MdSend } from "react-icons/md";
 import useChatContext from "../context/ChatContext";
@@ -6,6 +5,13 @@ import { useNavigate } from "react-router";
 import SockJS from "sockjs-client";
 import { baseURL } from "../config/AxiosHelper";
 import axios from "axios";
+import { createPortal } from "react-dom";
+
+// for theme
+// Add these two imports at the top with your other imports
+import { useChatBackground } from "../hooks/useChatBackground";
+import ThemePicker from "../components/ThemePicker";
+
 import {
   HiOutlineDotsVertical,
   HiMenuAlt3,
@@ -23,8 +29,26 @@ import { formatTime } from "../config/Helper";
 import { deleteRoomApi } from "../services/adminRoomService";
 
 const ChatPage = () => {
+  // for 3 dots menu design
+  const menuBtnStyle = {
+    display: "block",
+    width: "100%",
+    textAlign: "left",
+    padding: "7px 12px",
+    borderRadius: "8px",
+    background: "transparent",
+    border: "none",
+    color: "rgba(255,255,255,0.85)",
+    fontSize: "13px",
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+    transition: "background 0.15s",
+  };
+
   const [openDropdownId, setOpenDropdownId] = useState(null);
 
+  // for preview media
+  const [previewMedia, setPreviewMedia] = useState(null); // { url, type }s
   // for delete the chat room only for current user
   const [isCreator, setIsCreator] = useState(false);
   // for search func
@@ -94,6 +118,10 @@ const ChatPage = () => {
   // Reusing your existing state name to avoid changing other logic
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  // for GIF in chat page
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [gifs, setGifs] = useState([]);
+
   const {
     roomId,
     currentUser,
@@ -112,6 +140,74 @@ const ChatPage = () => {
     }
   }, [connected, roomId, currentUser, isLoggingOut]);
 
+  // ============== theme change in chat page =========================
+  // Add after your existing state declarations, around line 80
+  const [showThemePicker, setShowThemePicker] = useState(false);
+
+  const { background, updateBackground, resetBackground } = useChatBackground(
+    currentUser, // already in your context
+    roomId, // already in your context
+  );
+
+  // Compute the bg style
+  const chatBgStyle = background.value
+    ? background.type === "image"
+      ? {
+          backgroundImage: `url(${background.value})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+        }
+      : { backgroundColor: background.value }
+    : {}; // no style = use your existing Tailwind classes
+  // ============== theme change in chat page end =========================
+
+  // ========================= GIF section =========================
+  const fetchGifs = async (query = "funny") => {
+    try {
+      const res = await fetch(
+        `https://api.giphy.com/v1/gifs/search?api_key=kQHjRnd3mJ8XX98hhKcNkF7ma0RaSVIX&q=${query}&limit=12`,
+      );
+      const data = await res.json();
+      setGifs(data.data);
+    } catch (err) {
+      console.error("GIF fetch error", err);
+    }
+  };
+  const sendGif = (gifUrl) => {
+    if (stompClient && connected) {
+      const message = {
+        sender: currentUser,
+        content: gifUrl,
+        roomId,
+        timestamp: new Date().toISOString(),
+        fileType: "gif", // ⭐ important
+      };
+
+      stompClient.send(
+        `/app/sendMessage/${roomId}`,
+        {},
+        JSON.stringify(message),
+      );
+
+      setShowGifPicker(false);
+    }
+  };
+  // ==============================gif section ends here ===================
+  // for 3 dots menu
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setOpenDropdownId(null);
+      }
+    }
+    if (openDropdownId !== null) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openDropdownId]);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const inputRef = useRef(null);
@@ -137,7 +233,7 @@ const ChatPage = () => {
 
     try {
       const res = await fetch(
-        `http://localhost:8080/api/auth/photo/${username}`
+        `http://localhost:8080/api/auth/photo/${username}`,
       );
       console.log(`http://localhost:8080/api/auth/photo/${username}`);
       if (!res.ok) throw new Error("No photo");
@@ -164,7 +260,7 @@ const ChatPage = () => {
     }
     const seed = Array.from(username).reduce(
       (acc, char) => acc + char.charCodeAt(0),
-      0
+      0,
     );
     const randomAvatarId = (seed % 100) + 1;
     return `https://avatar.iran.liara.run/public/${randomAvatarId}`;
@@ -230,16 +326,26 @@ const ChatPage = () => {
 
   // load the messages
   useEffect(() => {
+    // async function loadMessages() {
+    //   try {
+    //     const messages = await getMessagess(roomId);
+    //     setMessages(messages);
+    //   } catch (error) {}
+    // }
+    // if (connected) {
+    //   loadMessages().then((msgs) => {
+    //     msgs.forEach((m) => loadUserPhoto(m.sender)); // <-- important
+    //   });
+    // }
     async function loadMessages() {
       try {
         const messages = await getMessagess(roomId);
         setMessages(messages);
+        messages.forEach((m) => loadUserPhoto(m.sender));
       } catch (error) {}
     }
     if (connected) {
-      loadMessages().then((msgs) => {
-        msgs.forEach((m) => loadUserPhoto(m.sender)); // <-- important
-      });
+      loadMessages();
     }
   }, [connected, roomId]);
 
@@ -286,6 +392,7 @@ const ChatPage = () => {
 
           // ⭐ Normal chat message
           setMessages((prev) => [...prev, msg]);
+          loadUserPhoto(msg.sender);
         });
 
         // for delete room who create the room only he can abel to delete
@@ -330,7 +437,7 @@ const ChatPage = () => {
               // If user already reacted with same emoji -> remove (toggle off)
               if (previousEmoji === data.emoji) {
                 reactions[data.emoji] = reactions[data.emoji].filter(
-                  (u) => u !== data.username
+                  (u) => u !== data.username,
                 );
                 if (reactions[data.emoji].length === 0)
                   delete reactions[data.emoji];
@@ -342,7 +449,7 @@ const ChatPage = () => {
               // Otherwise: remove user from any previous emoji (one reaction per user)
               if (previousEmoji) {
                 reactions[previousEmoji] = reactions[previousEmoji].filter(
-                  (u) => u !== data.username
+                  (u) => u !== data.username,
                 );
                 if (reactions[previousEmoji].length === 0)
                   delete reactions[previousEmoji];
@@ -356,7 +463,7 @@ const ChatPage = () => {
               m.pop = true; // optional animation flag
 
               return { ...m, reactions };
-            })
+            }),
           );
         });
 
@@ -384,8 +491,8 @@ const ChatPage = () => {
                     pollVotes: data.pollVotes,
                     votedUsers: data.votedUsers,
                   }
-                : m
-            )
+                : m,
+            ),
           );
         });
       });
@@ -409,7 +516,7 @@ const ChatPage = () => {
         `http://localhost:8080/api/v1/rooms/${roomId}/message/${messageId}`,
         {
           method: "DELETE",
-        }
+        },
       );
       // if (res.ok) {
       //   toast.success("Message deleted");
@@ -432,8 +539,8 @@ const ChatPage = () => {
                   pollVotes: {}, // optional (remove poll votes)
                   votedUsers: {}, // optional
                 }
-              : m
-          )
+              : m,
+          ),
         );
       } else {
         toast.error("Failed to delete");
@@ -451,7 +558,7 @@ const ChatPage = () => {
         messageId,
         emoji,
         username: currentUser,
-      })
+      }),
     );
     setReactionPickerId(null);
   };
@@ -491,7 +598,7 @@ const ChatPage = () => {
             roomId,
             content: result.fileUrl,
             fileType: "audio",
-          })
+          }),
         );
       };
 
@@ -567,7 +674,7 @@ const ChatPage = () => {
         messageId,
         username: currentUser,
         option,
-      })
+      }),
     );
   };
 
@@ -580,7 +687,7 @@ const ChatPage = () => {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content: input }),
-        }
+        },
       );
 
       if (res.ok) {
@@ -589,8 +696,8 @@ const ChatPage = () => {
           prev.map((m) =>
             m.id === editingMessageId
               ? { ...m, content: input, edited: true }
-              : m
-          )
+              : m,
+          ),
         );
         setInput("");
         setEditingMessageId(null);
@@ -613,7 +720,7 @@ const ChatPage = () => {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ content: input }),
-          }
+          },
         );
 
         if (response.ok) {
@@ -625,8 +732,8 @@ const ChatPage = () => {
                     content: input,
                     edited: true,
                   }
-                : msg
-            )
+                : msg,
+            ),
           );
           setEditingMessageId(null);
           setInput("");
@@ -659,7 +766,7 @@ const ChatPage = () => {
       stompClient.send(
         `/app/sendMessage/${roomId}`,
         {},
-        JSON.stringify(message)
+        JSON.stringify(message),
       );
 
       setInput(""); // clear input after sending
@@ -700,7 +807,7 @@ const ChatPage = () => {
     try {
       if (roomId && currentUser) {
         await axios.get(
-          `http://localhost:8080/api/v1/rooms/${roomId}/leave/${currentUser}`
+          `http://localhost:8080/api/v1/rooms/${roomId}/leave/${currentUser}`,
         );
       }
     } catch (err) {
@@ -746,7 +853,7 @@ const ChatPage = () => {
         stompClient.send(
           `/app/sendMessage/${roomId}`,
           {},
-          JSON.stringify(message)
+          JSON.stringify(message),
         );
       } else {
         toast.error(result.error || "File upload failed");
@@ -782,7 +889,7 @@ const ChatPage = () => {
         stompClient.send(
           `/app/sendMessage/${roomId}`,
           {},
-          JSON.stringify(message)
+          JSON.stringify(message),
         );
         setPreviewFile(null);
       } else {
@@ -901,7 +1008,7 @@ const ChatPage = () => {
               <button
                 onClick={() => {
                   setReplyTo(
-                    messages.find((m) => m.id === selectedMessages[0])
+                    messages.find((m) => m.id === selectedMessages[0]),
                   );
                   setIsSelecting(false);
                 }}
@@ -1023,7 +1130,6 @@ const ChatPage = () => {
                 >
                   💬 All Chats
                 </button>
-
                 <button
                   onClick={() => {
                     setIsSidebarOpen(false);
@@ -1035,7 +1141,6 @@ const ChatPage = () => {
                 >
                   📝 Complaint
                 </button>
-
                 <button
                   onClick={() => {
                     setIsSidebarOpen(false);
@@ -1047,7 +1152,6 @@ const ChatPage = () => {
                 >
                   ⚙️ All Users
                 </button>
-
                 {/* Delete Room — only creator can see */}
                 {currentUser === createdBy && (
                   <button
@@ -1057,7 +1161,6 @@ const ChatPage = () => {
                     🗑 Delete Room
                   </button>
                 )}
-
                 <button
                   onClick={() => {
                     setIsSidebarOpen(false);
@@ -1067,9 +1170,18 @@ const ChatPage = () => {
                 >
                   ⚙️ Settings
                 </button>
-
                 <hr className="border-t border-white/10 my-2" />
 
+                <button
+                  onClick={() => {
+                    setIsSidebarOpen(false);
+                    setShowThemePicker(true);
+                  }}
+                  className="glass-item w-full text-left px-3 py-2 rounded-lg text-gray-800 dark:text-gray-100 transition-all"
+                >
+                  🎨 Theme
+                </button>
+                <hr className="border-t border-white/10 my-2" />
                 <button
                   onClick={() => {
                     setIsSidebarOpen(false);
@@ -1086,11 +1198,22 @@ const ChatPage = () => {
       </AnimatePresence>
 
       {/* ===== Main Message Area  ===== */}
-      <main
+      {/* <main
         ref={chatBoxRef}
         className="bg-gray-300 py-20 w-2/3 dark:bg-slate-700 mx-auto h-screen 
              overflow-y-auto overflow-x-hidden px-7
              [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      > */}
+      <main
+        ref={chatBoxRef}
+        className="py-20 w-2/3 mx-auto h-screen 
+       overflow-y-auto overflow-x-hidden px-7
+       [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={{
+          // fallback Tailwind-like colors when no custom bg is set
+          backgroundColor: background.value ? undefined : undefined,
+          ...chatBgStyle,
+        }}
       >
         {/* search func */}
         {/* SEARCH BAR (GLOBAL, NOT INSIDE MESSAGE LOOP) */}
@@ -1163,60 +1286,36 @@ const ChatPage = () => {
                     <img
                       src={message.content}
                       alt={message.fileName || "sent"}
-                      className="max-w-[200px] rounded-md transition-transform duration-200 group-hover:brightness-75"
+                      onClick={() =>
+                        setPreviewMedia({ url: message.content, type: "image" })
+                      }
+                      className="max-w-[200px] rounded-md cursor-pointer hover:brightness-90 transition"
                     />
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        fetch(message.content)
-                          .then((res) => res.blob())
-                          .then((blob) => {
-                            const link = document.createElement("a");
-                            link.href = URL.createObjectURL(blob);
-                            link.download =
-                              message.fileName ||
-                              message.content.split("/").pop();
-                            link.click();
-                            URL.revokeObjectURL(link.href);
-                          })
-                          .catch(() => toast.error("Download failed"));
-                      }}
-                      className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                    >
-                      <div className="bg-black bg-opacity-60 text-white px-3 py-1 rounded-md text-sm">
-                        ⬇ Download
-                      </div>
-                    </button>
                   </div>
                 );
               }
 
               if (type.includes("pdf") || url.endsWith(".pdf")) {
                 return (
-                  <div className="relative group inline-block">
+                  <div
+                    onClick={() =>
+                      setPreviewMedia({ url: message.content, type: "pdf" })
+                    }
+                    className="cursor-pointer relative group inline-block"
+                  >
                     <iframe
                       src={message.content}
                       title="pdf"
-                      className="w-40 h-40 rounded-md transition-transform duration-200 group-hover:brightness-75"
+                      className="w-40 h-40 rounded-md pointer-events-none"
                     />
-                    <button
-                      onClick={() => {
-                        const link = document.createElement("a");
-                        link.href = message.content;
-                        link.download =
-                          message.fileName || message.content.split("/").pop();
-                        link.click();
-                      }}
-                      className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                    >
-                      <div className="bg-black bg-opacity-60 text-white px-3 py-1 rounded-md text-sm">
-                        ⬇ Download PDF
-                      </div>
-                    </button>
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/40 rounded-md">
+                      <span className="text-white text-sm font-medium">
+                        🔍 Preview
+                      </span>
+                    </div>
                   </div>
                 );
               }
-
               if (
                 type.includes("spreadsheet") ||
                 url.endsWith(".xls") ||
@@ -1299,10 +1398,10 @@ const ChatPage = () => {
                   (url.endsWith(".webm")
                     ? "audio/webm"
                     : url.endsWith(".mp3")
-                    ? "audio/mpeg"
-                    : url.endsWith(".wav")
-                    ? "audio/wav"
-                    : "audio/webm");
+                      ? "audio/mpeg"
+                      : url.endsWith(".wav")
+                        ? "audio/wav"
+                        : "audio/webm");
 
                 return (
                   <div
@@ -1312,8 +1411,8 @@ const ChatPage = () => {
                   isSelected(message.id)
                     ? "bg-blue-300 dark:bg-blue-700 border-2 border-blue-500"
                     : message.sender === currentUser
-                    ? "bg-green-300 dark:bg-green-900"
-                    : "bg-gray-200 dark:bg-gray-800"
+                      ? "bg-green-300 dark:bg-green-900"
+                      : "bg-gray-200 dark:bg-gray-800"
                 }
                 rounded-lg w-56`}
                   >
@@ -1393,8 +1492,8 @@ const ChatPage = () => {
                       isSelected(message.id)
                         ? "bg-blue-300 dark:bg-blue-700 border-2 border-blue-500"
                         : message.sender === currentUser
-                        ? "bg-green-300 dark:bg-green-900"
-                        : "bg-gray-200 dark:bg-gray-800"
+                          ? "bg-green-300 dark:bg-green-900"
+                          : "bg-gray-200 dark:bg-gray-800"
                     } text-gray-800 dark:text-gray-100 max-w-xs rounded-md pr-2 pl-2 py-1 shadow-sm`}
                   >
                     <div className="flex flex-col gap-1 group relative">
@@ -1430,7 +1529,7 @@ const ChatPage = () => {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setOpenDropdownId((prev) =>
-                                  prev === message.id ? null : message.id
+                                  prev === message.id ? null : message.id,
                                 );
                               }}
                               className={`text-black-100 dark:text-gray-400 dark:hover:text-white 
@@ -1446,24 +1545,93 @@ const ChatPage = () => {
 
                             {openDropdownId === message.id && (
                               <div
-                                className="absolute right-0 top-6 dark:bg-gray-800 bg-gray-200 
-                 dark:text-white rounded-md shadow-lg z-10 w-28"
                                 onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  position: "absolute",
+                                  right: 0,
+                                  top: "28px",
+                                  zIndex: 50,
+                                  minWidth: "130px",
+                                  borderRadius: "12px",
+                                  padding: "6px",
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "2px",
+                                  background: "rgba(15, 25, 50, 0.72)",
+                                  backdropFilter: "blur(16px)",
+                                  WebkitBackdropFilter: "blur(16px)",
+                                  border: "1px solid rgba(120,170,255,0.18)",
+                                  boxShadow: "0 8px 32px rgba(0,0,0,0.35)",
+                                }}
                               >
-                                {/* reply */}
+                                {/* Reply */}
                                 <button
                                   onClick={() => {
                                     setReplyTo(message);
                                     setOpenDropdownId(null);
                                   }}
-                                  className="block w-full text-left px-3 py-1 
-    rounded-md bg-gray-200 hover:bg-gray-50
-    dark:bg-gray-800 dark:hover:bg-gray-700"
+                                  style={menuBtnStyle}
+                                  onMouseEnter={(e) =>
+                                    (e.currentTarget.style.background =
+                                      "rgba(255,255,255,0.08)")
+                                  }
+                                  onMouseLeave={(e) =>
+                                    (e.currentTarget.style.background =
+                                      "transparent")
+                                  }
                                 >
                                   ↩️ Reply
                                 </button>
 
-                                {/* Delete + Edit ONLY FOR OWN MESSAGE */}
+                                {/* Download */}
+                                {(message.fileType ||
+                                  message.fileName ||
+                                  (message.content &&
+                                    (message.content.includes(".jpg") ||
+                                      message.content.includes(".jpeg") ||
+                                      message.content.includes(".png") ||
+                                      message.content.includes(".pdf") ||
+                                      message.content.includes(".webm") ||
+                                      message.content.includes(".mp3") ||
+                                      message.content.includes(".gif") ||
+                                      message.content.includes(".doc") ||
+                                      message.content.includes(".xls")))) &&
+                                  !message.deleted && (
+                                    <button
+                                      onClick={() => {
+                                        fetch(message.content)
+                                          .then((r) => r.blob())
+                                          .then((blob) => {
+                                            const link =
+                                              document.createElement("a");
+                                            link.href =
+                                              URL.createObjectURL(blob);
+                                            link.download =
+                                              message.fileName ||
+                                              message.content.split("/").pop();
+                                            link.click();
+                                            URL.revokeObjectURL(link.href);
+                                          })
+                                          .catch(() =>
+                                            toast.error("Download failed"),
+                                          );
+                                        setOpenDropdownId(null);
+                                      }}
+                                      style={menuBtnStyle}
+                                      onMouseEnter={(e) =>
+                                        (e.currentTarget.style.background =
+                                          "rgba(255,255,255,0.08)")
+                                      }
+                                      onMouseLeave={(e) =>
+                                        (e.currentTarget.style.background =
+                                          "transparent")
+                                      }
+                                    >
+                                      ⬇️ Download
+                                    </button>
+                                  )}
+
+                                {/* Delete + Edit — own messages only */}
                                 {message.sender === currentUser && (
                                   <>
                                     <button
@@ -1471,9 +1639,18 @@ const ChatPage = () => {
                                         deleteMessage(message.id);
                                         setOpenDropdownId(null);
                                       }}
-                                      className="block w-full text-left px-3 py-1 
-                       rounded-md bg-gray-200 hover:bg-gray-50 
-                       dark:bg-gray-800 dark:hover:bg-gray-700"
+                                      style={{
+                                        ...menuBtnStyle,
+                                        color: "#ff6b6b",
+                                      }}
+                                      onMouseEnter={(e) =>
+                                        (e.currentTarget.style.background =
+                                          "rgba(255,80,80,0.1)")
+                                      }
+                                      onMouseLeave={(e) =>
+                                        (e.currentTarget.style.background =
+                                          "transparent")
+                                      }
                                     >
                                       🗑 Delete
                                     </button>
@@ -1481,11 +1658,9 @@ const ChatPage = () => {
                                     {!message.fileType &&
                                       !message.deleted &&
                                       (() => {
-                                        const msgTime = new Date(
-                                          message.timestamp
-                                        );
                                         const hoursDiff =
-                                          (new Date() - msgTime) /
+                                          (new Date() -
+                                            new Date(message.timestamp)) /
                                           (1000 * 60 * 60);
                                         return hoursDiff < 24 ? (
                                           <button
@@ -1493,13 +1668,19 @@ const ChatPage = () => {
                                               setEditingMessageId(message.id);
                                               setInput(message.content);
                                               setEditingOriginalText(
-                                                message.content
+                                                message.content,
                                               );
                                               setOpenDropdownId(null);
                                             }}
-                                            className="block w-full text-left px-3 py-1 
-                           rounded-md bg-gray-200 hover:bg-gray-50 
-                           dark:bg-gray-800 dark:hover:bg-gray-700"
+                                            style={menuBtnStyle}
+                                            onMouseEnter={(e) =>
+                                              (e.currentTarget.style.background =
+                                                "rgba(255,255,255,0.08)")
+                                            }
+                                            onMouseLeave={(e) =>
+                                              (e.currentTarget.style.background =
+                                                "transparent")
+                                            }
                                           >
                                             ✏️ Edit
                                           </button>
@@ -1508,19 +1689,26 @@ const ChatPage = () => {
                                   </>
                                 )}
 
-                                {/* React — visible FOR ALL MESSAGES */}
+                                {/* React */}
                                 <button
                                   onClick={() => {
                                     setReactionPickerId(message.id);
                                     setOpenDropdownId(null);
                                   }}
-                                  className="block w-full text-left px-3 py-1 
-                   rounded-md bg-gray-200 hover:bg-gray-50
-                   dark:bg-gray-800 dark:hover:bg-gray-700"
+                                  style={menuBtnStyle}
+                                  onMouseEnter={(e) =>
+                                    (e.currentTarget.style.background =
+                                      "rgba(255,255,255,0.08)")
+                                  }
+                                  onMouseLeave={(e) =>
+                                    (e.currentTarget.style.background =
+                                      "transparent")
+                                  }
                                 >
                                   😊 React
                                 </button>
-                                {/* 📌 Pin Message */}
+
+                                {/* Pin — admin only */}
                                 {user?.role === "ADMIN" && (
                                   <button
                                     onClick={() => {
@@ -1532,9 +1720,15 @@ const ChatPage = () => {
                                       });
                                       setOpenDropdownId(null);
                                     }}
-                                    className="block w-full text-left px-3 py-1 
-      rounded-md bg-gray-200 hover:bg-gray-50
-      dark:bg-gray-800 dark:hover:bg-gray-700"
+                                    style={menuBtnStyle}
+                                    onMouseEnter={(e) =>
+                                      (e.currentTarget.style.background =
+                                        "rgba(255,255,255,0.08)")
+                                    }
+                                    onMouseLeave={(e) =>
+                                      (e.currentTarget.style.background =
+                                        "transparent")
+                                    }
                                   >
                                     📌 Pin
                                   </button>
@@ -1560,6 +1754,7 @@ const ChatPage = () => {
                           </p>
                         </div>
                       )}
+
                       {/* MAIN MESSAGE CONTENT */}
 
                       {/* for poll */}
@@ -1647,7 +1842,7 @@ const ChatPage = () => {
                         Object.keys(message.reactions).length > 0 &&
                         (() => {
                           const reactionEntries = Object.entries(
-                            message.reactions
+                            message.reactions,
                           );
                           const uniqueEmojis = [];
                           const seen = new Set();
@@ -1662,7 +1857,7 @@ const ChatPage = () => {
 
                           const totalCount = reactionEntries.reduce(
                             (sum, [emoji, users]) => sum + users.length,
-                            0
+                            0,
                           );
 
                           return (
@@ -1740,7 +1935,7 @@ const ChatPage = () => {
                   <span>{user}</span>
                   <span>{option}</span>
                 </div>
-              )
+              ),
             )}
 
             <button
@@ -1784,32 +1979,6 @@ const ChatPage = () => {
             </div>
           )}
 
-          {/* <input
-    
-            onChange={(e) => {
-              setInput(e.target.value);
-
-              // 🔵 Send typing event
-              if (stompClient) {
-                stompClient.send(
-                  `/app/typing/${roomId}`,
-                  {},
-                  JSON.stringify({
-                    username: currentUser,
-                    typing: true,
-                  })
-                );
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                sendMessage();
-              }
-            }}
-            type="text"
-            placeholder="Type your Message..."
-            className="w-full   dark:bg-gray-800  px-5 py-2 rounded-full h-full focus:outline-none "
-          /> */}
           <input
             value={input}
             onChange={(e) => {
@@ -1822,7 +1991,7 @@ const ChatPage = () => {
                   JSON.stringify({
                     username: currentUser,
                     typing: true,
-                  })
+                  }),
                 );
               }
             }}
@@ -1906,30 +2075,23 @@ const ChatPage = () => {
             )}
 
             <button
+              onClick={() => {
+                setShowGifPicker(true);
+                fetchGifs(); // load default gifs
+              }}
+              className="bg-pink-500 hover:bg-pink-600 text-white h-10 w-10 flex justify-center items-center rounded-full"
+            >
+              GIF
+            </button>
+            <button
               onClick={sendMessage}
               className="bg-green-500 hover:bg-green-600 dark:bg-green-700 dark:hover:bg-green-800 text-white h-10 w-10 flex justify-center items-center rounded-full transition-colors duration-200"
             >
               <MdSend size={20} />
             </button>
-            {/* <button
-              onClick={() => setShowPollCreator(true)}
-              className="bg-blue-500 text-white h-10 px-3 rounded-full"
-            >
-              📊
-            </button> */}
-            {/* <button
-              onClick={toggleRecording}
-              className="bg-red-500 text-white h-10 w-10 flex justify-center items-center rounded-full"
-            >
-              🎤
-            </button> */}
 
             {/* 3-dot Menu */}
-            {/* <div className="relative group">
-              <button className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 h-10 w-10 flex justify-center items-center rounded-full dark:hover:bg-gray-600">
-                <b>⋮</b>
-              </button>
-            </div> */}
+
             <div className="relative group">
               <button
                 onClick={() => setShowMoreMenu((prev) => !prev)}
@@ -1951,13 +2113,13 @@ const ChatPage = () => {
                     onClick={toggleRecording}
                     className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10"
                   >
-                    Voice 🎤
+                    🎤 Voice
                   </button>
                   <button
                     onClick={() => setShowPollCreator(true)}
                     className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10"
                   >
-                    Poll 📊
+                    📊 Poll
                   </button>
                   <button
                     onClick={() => setShowSearchBar(true)}
@@ -1987,7 +2149,7 @@ const ChatPage = () => {
               <div className="flex flex-col gap-2 max-h-60 overflow-y-auto p-1">
                 {(() => {
                   const msg = messages.find(
-                    (m) => m.id === activeReactionMessageId
+                    (m) => m.id === activeReactionMessageId,
                   );
                   if (!msg) return null;
 
@@ -2002,7 +2164,7 @@ const ChatPage = () => {
                           <span className="dark:text-white">{u}</span>
                           <span className="text-lg">{emoji}</span>
                         </div>
-                      ))
+                      )),
                   );
                 })()}
               </div>
@@ -2069,6 +2231,274 @@ const ChatPage = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* for popup of images/ pdfs */}
+        {/* ===== LIGHTBOX POPUP ===== */}
+        {previewMedia &&
+          createPortal(
+            <div
+              onClick={() => setPreviewMedia(null)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 99999,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "rgba(0,0,0,0.75)",
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
+                animation: "fadeInBg 0.25s ease",
+              }}
+            >
+              <style>{`
+      @keyframes fadeInBg {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+      }
+      @keyframes popIn {
+        from { opacity: 0; transform: scale(0.92) translateY(16px); }
+        to   { opacity: 1; transform: scale(1)    translateY(0);    }
+      }
+      .preview-box {
+        animation: popIn 0.28s cubic-bezier(0.34,1.56,0.64,1);
+      }
+      .preview-scroll::-webkit-scrollbar { width: 6px; }
+      .preview-scroll::-webkit-scrollbar-track { background: transparent; }
+      .preview-scroll::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.25);
+        border-radius: 999px;
+      }
+    `}</style>
+
+              {/* Modal box */}
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="preview-box relative flex flex-col"
+                style={{
+                  width: "90vw",
+                  maxWidth: "900px",
+                  maxHeight: "90vh",
+                  borderRadius: "16px",
+                  overflow: "hidden",
+                  // background: "rgba(20,20,20,0.85)",
+                  background: "rgba(10, 25, 60, 0.75)", // dark blue glass
+                  backdropFilter: "blur(18px)",
+                  WebkitBackdropFilter: "blur(18px)",
+                  // border: "1px solid rgba(255,255,255,0.12)",
+                  border: "1px solid rgba(120, 170, 255, 0.25)",
+                  // boxShadow: "0 32px 80px rgba(0,0,0,0.6)",
+                  boxShadow: "0 32px 80px rgba(0, 80, 200, 0.35)",
+                }}
+              >
+                {/* Top bar */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 16px",
+                    // borderBottom: "1px solid rgba(255,255,255,0.08)",
+                    borderBottom: "1px solid rgba(120,170,255,0.15)",
+                    flexShrink: 0,
+                  }}
+                >
+                  <span
+                    style={{ color: "rgba(255,255,255,0.6)", fontSize: "13px" }}
+                  >
+                    {previewMedia.type === "image"
+                      ? "🖼 Image Preview"
+                      : previewMedia.type === "pdf"
+                        ? "📄 PDF Preview"
+                        : previewMedia.type === "audio"
+                          ? "🎵 Audio"
+                          : "📁 File Preview"}
+                  </span>
+
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    {/* Download btn */}
+                    <button
+                      onClick={() => {
+                        fetch(previewMedia.url)
+                          .then((r) => r.blob())
+                          .then((blob) => {
+                            const link = document.createElement("a");
+                            link.href = URL.createObjectURL(blob);
+                            link.download = previewMedia.url.split("/").pop();
+                            link.click();
+                            URL.revokeObjectURL(link.href);
+                          })
+                          .catch(() => toast.error("Download failed"));
+                      }}
+                      style={{
+                        background: "rgba(255,255,255,0.1)",
+                        border: "1px solid rgba(255,255,255,0.15)",
+                        color: "white",
+                        borderRadius: "8px",
+                        padding: "5px 14px",
+                        fontSize: "13px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      ⬇ Download
+                    </button>
+
+                    {/* Close btn */}
+                    <button
+                      onClick={() => setPreviewMedia(null)}
+                      style={{
+                        background: "rgba(255,80,80,0.15)",
+                        border: "1px solid rgba(255,80,80,0.3)",
+                        color: "#ff6b6b",
+                        borderRadius: "8px",
+                        padding: "5px 14px",
+                        fontSize: "13px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
+                </div>
+
+                {/* Content area — scrollable */}
+                <div
+                  className="preview-scroll"
+                  style={{
+                    overflowY: "auto",
+                    overflowX: "hidden",
+                    flex: 1,
+                    display: "flex",
+                    alignItems:
+                      previewMedia.type === "image" ? "center" : "flex-start",
+                    justifyContent: "center",
+                    padding: previewMedia.type === "image" ? "16px" : "0",
+                  }}
+                >
+                  {previewMedia.type === "image" && (
+                    <img
+                      src={previewMedia.url}
+                      alt="preview"
+                      style={{
+                        maxWidth: "100%",
+                        maxHeight: "75vh",
+                        objectFit: "contain",
+                        borderRadius: "10px",
+                      }}
+                    />
+                  )}
+
+                  {previewMedia.type === "pdf" && (
+                    <iframe
+                      src={previewMedia.url}
+                      title="PDF Preview"
+                      style={{
+                        width: "100%",
+                        height: "80vh",
+                        border: "none",
+                        display: "block",
+                      }}
+                    />
+                  )}
+
+                  {previewMedia.type === "audio" && (
+                    <div style={{ padding: "32px", textAlign: "center" }}>
+                      <p
+                        style={{
+                          color: "rgba(255,255,255,0.5)",
+                          marginBottom: "16px",
+                        }}
+                      >
+                        🎵 Voice Message
+                      </p>
+                      <audio
+                        controls
+                        style={{ width: "100%", maxWidth: "400px" }}
+                      >
+                        <source src={previewMedia.url} />
+                      </audio>
+                    </div>
+                  )}
+
+                  {previewMedia.type === "excel" && (
+                    <div
+                      style={{
+                        padding: "40px",
+                        textAlign: "center",
+                        color: "rgba(255,255,255,0.7)",
+                      }}
+                    >
+                      <div style={{ fontSize: "48px", marginBottom: "12px" }}>
+                        📗
+                      </div>
+                      <p>Excel file — click Download to open</p>
+                    </div>
+                  )}
+
+                  {previewMedia.type === "word" && (
+                    <div
+                      style={{
+                        padding: "40px",
+                        textAlign: "center",
+                        color: "rgba(255,255,255,0.7)",
+                      }}
+                    >
+                      <div style={{ fontSize: "48px", marginBottom: "12px" }}>
+                        📘
+                      </div>
+                      <p>Word file — click Download to open</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )}
+
+        {/* ========= for gif ================== */}
+        {showGifPicker && (
+          <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg w-[400px] max-h-[500px] overflow-y-auto">
+              <input
+                type="text"
+                placeholder="Search GIF..."
+                onChange={(e) => fetchGifs(e.target.value)}
+                className="w-full p-2 mb-3 rounded bg-gray-200 dark:bg-gray-700"
+              />
+
+              <div className="grid grid-cols-3 gap-2">
+                {gifs.map((gif) => (
+                  <img
+                    key={gif.id}
+                    src={gif.images.fixed_height.url}
+                    className="cursor-pointer rounded hover:scale-105 transition"
+                    onClick={() => sendGif(gif.images.fixed_height.url)}
+                  />
+                ))}
+              </div>
+
+              <button
+                onClick={() => setShowGifPicker(false)}
+                className="mt-3 w-full bg-red-500 text-white py-1 rounded"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* =========== for theme picker =========== */}
+        {/* Theme Picker Modal */}
+        {showThemePicker && (
+          <ThemePicker
+            onSelect={(type, value) => {
+              updateBackground(type, value);
+              setShowThemePicker(false);
+            }}
+            onReset={resetBackground}
+            onClose={() => setShowThemePicker(false)}
+          />
         )}
       </div>
     </div>

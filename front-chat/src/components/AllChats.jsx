@@ -22,6 +22,12 @@ import {
 } from "react-icons/hi";
 import { FiMessageCircle } from "react-icons/fi";
 export default function AllChats() {
+  // for search btn
+  // Add after const [unreadCount, setUnreadCount] = useState(0);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef(null);
+
   const [chatRooms, setChatRooms] = useState([]);
   const [user, setUser] = useState(null);
   const [photoUrl, setPhotoUrl] = useState(null);
@@ -103,7 +109,7 @@ export default function AllChats() {
   const fetchUserMessages = async () => {
     try {
       const res = await axios.get(
-        `http://localhost:8080/api/admin-messages/user/${user.username}`
+        `http://localhost:8080/api/admin-messages/user/${user.username}`,
       );
 
       setMessages(res.data);
@@ -140,7 +146,7 @@ export default function AllChats() {
       axios.put(`http://localhost:8080/api/admin-messages/read/${id}`);
 
       setMessages((prev) =>
-        prev.map((m) => (m.id === id ? { ...m, read: true } : m))
+        prev.map((m) => (m.id === id ? { ...m, read: true } : m)),
       );
       setUnreadCount((prev) => Math.max(prev - 1, 0));
     } catch {}
@@ -154,17 +160,6 @@ export default function AllChats() {
       .catch(() => toast.error("Failed to load chat rooms"));
   }, []);
 
-  // for dark and light mode toggle
-  // useEffect(() => {
-  //   if (darkMode) {
-  //     document.documentElement.classList.add("dark");
-  //     sessionStorage.setItem("theme", "dark");
-  //   } else {
-  //     document.documentElement.classList.remove("dark");
-  //     sessionStorage.setItem("theme", "light");
-  //   }
-  // }, [darkMode]);
-
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add("dark");
@@ -173,27 +168,6 @@ export default function AllChats() {
     }
   }, [darkMode]);
 
-  // Join room handler
-  // const handleJoinRoom = async (room) => {
-  //   const enteredRoomId = prompt("Enter Room ID to join:");
-  //   if (!enteredRoomId) return;
-
-  //   try {
-  //     const verifiedRoom = await verifyRoomApi(enteredRoomId);
-
-  //     if (verifiedRoom && verifiedRoom.roomName === room.roomName) {
-  //       toast.success("Room joined successfully!");
-  //       setConnected(true);
-  //       setRoomId(verifiedRoom.roomId);
-  //       setCurrentUser(user.username);
-  //       navigate("/chat-room");
-  //     } else {
-  //       toast.error("Room name mismatch!");
-  //     }
-  //   } catch {
-  //     toast.error("Room not found!");
-  //   }
-  // };
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [enteredRoomId, setEnteredRoomId] = useState("");
@@ -201,86 +175,6 @@ export default function AllChats() {
     setSelectedRoom(room);
     setIsPopupOpen(true); // open popup
   };
-
-  // const confirmJoinRoom = async () => {
-  //   if (!enteredRoomId) {
-  //     toast.error("Please enter a Room ID!");
-  //     return;
-  //   }
-
-  //   try {
-  //     const verifiedRoom = await verifyRoomApi(enteredRoomId);
-
-  //     if (verifiedRoom && verifiedRoom.roomName === selectedRoom.roomName) {
-  //       toast.success("Room joined successfully!");
-  //       setConnected(true);
-  //       setRoomId(verifiedRoom.roomId);
-  //       setCurrentUser(user.username);
-  //       setIsPopupOpen(false);
-  //       navigate("/chat-room");
-  //     } else {
-  //       toast.error("Room name mismatch!");
-  //     }
-  //   } catch {
-  //     toast.error("Room not found!");
-  //   }
-  // };
-
-  // const confirmJoinRoom = async () => {
-  //   if (!enteredRoomId) {
-  //     toast.error("Please enter a Room ID!");
-  //     return;
-  //   }
-
-  //   // try {
-  //   //   const verifiedRoom = await verifyRoomApi(enteredRoomId);
-
-  //   //   if (verifiedRoom) {
-  //   //     // ✅ Join the room (update active/total collections)
-  //   //     await axios.get(
-  //   //       `http://localhost:8080/api/v1/rooms/${verifiedRoom.roomId}/join/${user.username}`
-  //   //     );
-
-  //   //     toast.success("Room joined successfully!");
-  //   //     setConnected(true);
-  //   //     setRoomId(verifiedRoom.roomId);
-  //   //     setCurrentUser(user.username);
-  //   //     setIsPopupOpen(false);
-  //   //     navigate("/chat-room");
-  //   //   } else {
-  //   //     toast.error("Room not found!");
-  //   //   }
-  //   // } catch (error) {
-  //   //   toast.error("Room not found or network error!");
-  //   //   console.error(error);
-  //   // }
-  //   try {
-  //     const verifiedRoom = await verifyRoomApi(enteredRoomId);
-
-  //     if (!verifiedRoom) {
-  //       toast.error("Room not found!");
-  //       return;
-  //     }
-
-  //     // Try to join room
-  //     await axios.get(
-  //       `http://localhost:8080/api/v1/rooms/${verifiedRoom.roomId}/join/${user.username}`
-  //     );
-
-  //     toast.success("Room joined successfully!");
-  //     setConnected(true);
-  //     setRoomId(verifiedRoom.roomId);
-  //     setCurrentUser(user.username);
-  //     setIsPopupOpen(false);
-  //     navigate("/chat-room");
-  //   } catch (error) {
-  //     if (error.response?.status === 403) {
-  //       toast.error("❌ You are banned from this room!");
-  //     } else {
-  //       toast.error("Room not found or network error!");
-  //     }
-  //   }
-  // };
 
   const confirmJoinRoom = async () => {
     if (!enteredRoomId) {
@@ -338,6 +232,15 @@ export default function AllChats() {
     navigate("/chat");
   };
 
+  // Add just before the return() statement
+  const filteredRooms = chatRooms.filter((room) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      room.roomName?.toLowerCase().includes(q) ||
+      room.roomId?.toLowerCase().includes(q)
+    );
+  });
   return (
     <div className="min-h-screen bg-white dark:border-gray-700 dark:bg-gray-950 text-black dark:text-white flex flex-col relative overflow-hidden">
       {/* Floating Transparent Bubbles (visible only in dark mode) */}
@@ -431,17 +334,7 @@ export default function AllChats() {
         </button>
       </div>
       {/* msg button */}
-      {/* <motion.button
-        onClick={() => setMsgPopupOpen(true)}
-        className="fixed top-20 left-5 z-[5000] w-14 h-14 rounded-full 
-             bg-gradient-to-r from-blue-500 to-cyan-400 
-             shadow-[0_0_20px_#00eaff] flex items-center justify-center
-             hover:scale-110 transition"
-        animate={{ y: [0, -6, 0] }}
-        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-      >
-        <FiMessageCircle size={24} className="drop-shadow-lg" />
-      </motion.button> */}
+
       <motion.button
         onClick={() => setMsgPopupOpen(true)}
         className="fixed top-20 left-5 z-[5000] w-14 h-14 rounded-full 
@@ -463,11 +356,74 @@ export default function AllChats() {
         )}
       </motion.button>
 
+      {/* Floating Search Button */}
+      <motion.div
+        className="fixed top-36 left-5 z-[5000] flex items-center"
+        animate={{ y: [0, -6, 0] }}
+        transition={{
+          duration: 2,
+          repeat: Infinity,
+          ease: "easeInOut",
+          delay: 0.5,
+        }}
+      >
+        <motion.div
+          className="flex items-center overflow-hidden rounded-full bg-gradient-to-r from-violet-500 to-purple-400 shadow-[0_0_20px_#a855f7]"
+          animate={{ width: showSearch ? 220 : 56, height: 56 }}
+          transition={{ duration: 0.35, ease: "easeInOut" }}
+        >
+          {/* Search Icon Button */}
+          <button
+            onClick={() => {
+              setShowSearch((prev) => {
+                const next = !prev;
+                if (next)
+                  setTimeout(() => searchInputRef.current?.focus(), 350);
+                else setSearchQuery("");
+                return next;
+              });
+            }}
+            className="min-w-[56px] h-14 flex items-center justify-center text-white"
+          >
+            {showSearch ? (
+              <HiX size={22} className="text-white drop-shadow" />
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-6 h-6 text-white drop-shadow-lg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"
+                />
+              </svg>
+            )}
+          </button>
+
+          {/* Expandable Input */}
+          {showSearch && (
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search room..."
+              className="bg-transparent text-white placeholder-purple-200 text-sm 
+                   outline-none w-full pr-4"
+            />
+          )}
+        </motion.div>
+      </motion.div>
       {/* Chat Room Grid */}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 p-6 justify-items-center">
-        {chatRooms.length > 0 ? (
-          chatRooms.map((room) => (
+        {filteredRooms.length > 0 ? (
+          filteredRooms.map((room) => (
             <div
               id="card-info"
               key={room.roomId}
@@ -492,8 +448,13 @@ export default function AllChats() {
             </div>
           ))
         ) : (
+          // <p className="text-center col-span-full text-gray-400 text-lg">
+          //   No chat rooms available.
+          // </p>
           <p className="text-center col-span-full text-gray-400 text-lg">
-            No chat rooms available.
+            {searchQuery
+              ? `No rooms found for "${searchQuery}"`
+              : "No chat rooms available."}
           </p>
         )}
       </div>
@@ -563,53 +524,7 @@ export default function AllChats() {
       </Popup>
 
       {/* floating msg button */}
-      {/* <Popup
-        open={msgPopupOpen}
-        onClose={() => setMsgPopupOpen(false)}
-        modal
-        nested
-        contentStyle={{
-          background: "transparent",
-          border: "none",
-          padding: 0,
-        }}
-        overlayStyle={{
-          background: "rgba(0,0,0,0.6)",
-          backdropFilter: "blur(8px)",
-        }}
-      >
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.25 }}
-          className="bg-gray-900/70 backdrop-blur-xl text-white p-5 rounded-2xl 
-               shadow-2xl w-[320px] max-h-[450px] overflow-y-auto 
-               border border-gray-600 mx-auto"
-        >
-          <h2 className="text-xl font-semibold mb-4 text-cyan-300">Messages</h2>
 
-          {messages.length === 0 && (
-            <p className="text-gray-400 text-center">No messages found.</p>
-          )}
-
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className="p-3 mb-3 rounded-xl bg-gray-800/70 border border-gray-700"
-            >
-              <p className="text-sm text-gray-300">{msg.message}</p>
-              <p className="text-xs text-gray-500 mt-2">{msg.date}</p>
-
-              <button
-                onClick={() => deleteMessage(msg.id)}
-                className="mt-3 bg-red-600 hover:bg-red-700 px-3 py-1 rounded-md text-sm"
-              >
-                Delete
-              </button>
-            </div>
-          ))}
-        </motion.div>
-      </Popup> */}
       <Popup
         open={msgPopupOpen}
         onClose={() => setMsgPopupOpen(false)}
