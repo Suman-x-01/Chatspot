@@ -386,7 +386,7 @@ public ResponseEntity<?> joinRoom(@PathVariable String roomId, @PathVariable Str
 				// ✅ Notify others via WebSocket
 				messagingTemplate.convertAndSend(
 						"/topic/room/" + roomId,
-						Map.of("type", "system", "content", username + " left the room")
+						Map.of("type", "system", "content", username + " left the r oom")
 				);
 			} else {
 				System.out.println("⚠️ " + username + " was not found in active users for room " + roomId);

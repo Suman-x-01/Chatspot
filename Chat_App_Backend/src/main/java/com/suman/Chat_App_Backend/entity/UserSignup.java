@@ -32,7 +32,19 @@ public class UserSignup {
 		this.joinedRooms = joinedRooms;
 	}
 
+
+	// Add these two fields alongside your existing ones:
+	private String sessionToken;
+	private String lastLogin;
+
+
 	// Getters & Setters
+	// Add getters & setters:
+	public String getSessionToken() { return sessionToken; }
+	public void setSessionToken(String sessionToken) { this.sessionToken = sessionToken; }
+
+	public String getLastLogin() { return lastLogin; }
+	public void setLastLogin(String lastLogin) { this.lastLogin = lastLogin; }
 //	public String getRoomId() { return roomId; }
 //	public void setRoomId(String roomId) { this.roomId = roomId; }
 	// Getters & Setters
