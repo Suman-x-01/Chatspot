@@ -8,6 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import java.util.UUID;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -62,6 +63,9 @@ public class AuthController {
 //		return ResponseEntity.ok().body(user.getPhoto());
 //	}
 
+//
+//-----------------	LOGIN   -----------------
+	// Add this import at the top with your other imports
 
 	// ---------- LOGIN ----------
 	@PostMapping("/login")
@@ -78,14 +82,23 @@ public class AuthController {
 			if (!user.getPassword().equals(password)) {
 				return ResponseEntity.status(401).body("Invalid password!");
 			}
-			System.out.println("============================="+username);
+
+			System.out.println("=============================" + username);
+
+			// ✅ Generate new session token on every login
+			String sessionToken = UUID.randomUUID().toString();
+			user.setSessionToken(sessionToken);
+			user.setLastLogin(java.time.LocalDateTime.now().toString());
+			userRepository.save(user); // ✅ save token to DB
+
 			// create response map
 			Map<String, Object> response = new HashMap<>();
 			response.put("username", user.getUsername());
 			response.put("email", user.getEmail());
 			response.put("phone", user.getPhone());
+			response.put("sessionToken", sessionToken); // ✅ send token to frontend
 
-			// send photo as base64 string (React can display it)
+			// send photo as base64 string
 			if (user.getPhoto() != null) {
 				String base64Photo = java.util.Base64.getEncoder().encodeToString(user.getPhoto());
 				response.put("photo", base64Photo);
@@ -98,6 +111,42 @@ public class AuthController {
 			return ResponseEntity.status(500).body("Error: " + e.getMessage());
 		}
 	}
+//
+// ---------- LOGIN ----------
+//	@PostMapping("/login")
+//	public ResponseEntity<?> login(@RequestBody Map<String, String> credentials) {
+//		try {
+//			String username = credentials.get("username");
+//			String password = credentials.get("password");
+//
+//			UserSignup user = userRepository.findByUsername(username);
+//			if (user == null) {
+//				return ResponseEntity.status(401).body("User not found!");
+//			}
+//
+//			if (!user.getPassword().equals(password)) {
+//				return ResponseEntity.status(401).body("Invalid password!");
+//			}
+//			System.out.println("============================="+username);
+//			// create response map
+//			Map<String, Object> response = new HashMap<>();
+//			response.put("username", user.getUsername());
+//			response.put("email", user.getEmail());
+//			response.put("phone", user.getPhone());
+//
+//			// send photo as base64 string (React can display it)
+//			if (user.getPhoto() != null) {
+//				String base64Photo = java.util.Base64.getEncoder().encodeToString(user.getPhoto());
+//				response.put("photo", base64Photo);
+//			}
+//
+//			return ResponseEntity.ok(response);
+//
+//		} catch (Exception e) {
+//			e.printStackTrace();
+//			return ResponseEntity.status(500).body("Error: " + e.getMessage());
+//		}
+//	}
 
 	// ---------- FETCH PHOTO ----------
 //	@GetMapping("/photo/{username}")

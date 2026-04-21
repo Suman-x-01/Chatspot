@@ -3,6 +3,7 @@ package com.suman.Chat_App_Backend.entity;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,7 +14,11 @@ public class ActiveRoomUsers {
 	private String roomId;
 
 	private List<ActiveUserInfo> activeUsers = new ArrayList<>();
+	// In your existing ActiveRoomUsers.java, add:
+	private LocalDateTime lastSeen;
 
+	public LocalDateTime getLastSeen() { return lastSeen; }
+	public void setLastSeen(LocalDateTime lastSeen) { this.lastSeen = lastSeen; }
 	public ActiveRoomUsers() {}
 
 	public ActiveRoomUsers(String roomId) {
