@@ -4,6 +4,8 @@ import "react-tooltip/dist/react-tooltip.css";
 import { baseURL } from "../config/AxiosHelper";
 import axios from "axios";
 
+import { useSessionGuard } from "../hooks/useSessionGuard";
+
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -168,6 +170,11 @@ export default function AllChats() {
     }
   }, [darkMode]);
 
+  // 2. Add inside the component, after your existing useEffects:
+  useSessionGuard(user, () => {
+    sessionStorage.removeItem("user");
+    navigate("/login/user");
+  });
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [enteredRoomId, setEnteredRoomId] = useState("");

@@ -27,6 +27,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { getMessagess } from "../services/RoomService";
 import { formatTime } from "../config/Helper";
 import { deleteRoomApi } from "../services/adminRoomService";
+import { useSessionGuard } from "../hooks/useSessionGuard";
 
 const ChatPage = () => {
   // for 3 dots menu design
@@ -937,6 +938,37 @@ const ChatPage = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isSidebarOpen]);
 
+  // 2. Add inside the component, after your existing useEffects:
+  useSessionGuard(user, () => {
+    sessionStorage.removeItem("user");
+    setConnected(false);
+    setRoomId("");
+    setCurrentUser("");
+    navigate("/login/user");
+  });
+  // Add this useEffect inside ChatPage, after your existing useEffects:
+  useEffect(() => {
+    if (!connected || !roomId || !currentUser) return;
+
+    // Send heartbeat immediately, then every 15 seconds
+    const sendHeartbeat = () => {
+      fetch(`http://localhost:8080/api/heartbeat/${roomId}/${currentUser}`, {
+        method: "POST",
+      }).catch(() => {}); // silently fail
+    };
+
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 15000);
+
+    // Also send on tab close / browser close
+    const handleUnload = () => sendHeartbeat();
+    window.addEventListener("beforeunload", handleUnload);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("beforeunload", handleUnload);
+    };
+  }, [connected, roomId, currentUser]);
   return (
     <div>
       {/* ===== HEADER ===== */}

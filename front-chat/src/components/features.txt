@@ -55,7 +55,7 @@ You already have unread logic → expand it.
 
 ---
 
-## ⭐ 5. **Pinned Messages**
+## ⭐ 5. **Pinned Messages** ✔️
 
 Admin or creator can pin an important message at the top.
 
@@ -237,38 +237,5 @@ I can give:
 ✔ WebSocket integration
 
 Tell me **which feature you want to implement next**.
-
-
-
-=============== pending claude[chrome] task ===========
-// After successful login API response:
-const userData = {
-  username: res.data.username,
-  role: res.data.role,
-  sessionToken: res.data.sessionToken,  // ← save this
-};
-sessionStorage.setItem("user", JSON.stringify(userData));
-
-
-            -- && --
-
-
- // Import at top
-import { useSessionGuard } from "../hooks/useSessionGuard";
-
-// Inside the component, after your existing useEffects:
-useSessionGuard(user, () => {
-  // Clear everything and redirect
-  sessionStorage.removeItem("user");
-  setConnected(false);
-  setRoomId("");
-  setCurrentUser("");
-  navigate("/login/user");
-});
-
------------- > this is not implemented / didnot used the codein 3rd last response.
-
-in 3rd last response problem 2 is not implemented by me in my code.
-
 
 
